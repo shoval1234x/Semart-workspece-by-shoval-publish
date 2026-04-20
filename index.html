@@ -1288,6 +1288,20 @@
         window.openModal = () => document.getElementById('authModal').classList.remove('hidden');
         window.closeModal = () => document.getElementById('authModal').classList.add('hidden');
         
+        // --- פונקציה חדשה: בדיקה לפני פתיחת פרופיל ---
+        window.handleProfileClick = () => {
+            const user = window.auth.currentUser;
+            const isLoggedOut = localStorage.getItem('shoval_simulated_logout') === 'true';
+            
+            // אם המשתמש מחובר (לא אורח ולא התנתק הרגע)
+            if (user && !user.isAnonymous && !isLoggedOut) {
+                document.getElementById('profilesModal').classList.remove('hidden');
+            } else {
+                // אם הוא במצב אורח - נפתח את מסך ההתחברות/הרשמה
+                window.openModal();
+            }
+        };
+
         window.editingProfileId = null;
         let deleteConfirmTimer = null;
 
