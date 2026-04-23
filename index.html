@@ -30,7 +30,7 @@
         document.head.insertAdjacentHTML('beforeend', `<link rel="manifest" href="${URL.createObjectURL(manifestBlob)}">`);
 
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signOut, createUserWithEmailAndPassword, signInWithEmailAndPassword, sendEmailVerification } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, deleteDoc, getDocs, query } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 
         let firebaseConfig = {
@@ -64,6 +64,7 @@
         window.signInAnonymously = signInAnonymously;
         window.createUserWithEmailAndPassword = createUserWithEmailAndPassword;
         window.signInWithEmailAndPassword = signInWithEmailAndPassword;
+        window.sendEmailVerification = sendEmailVerification;
         window.onAuthStateChanged = onAuthStateChanged;
         window.signOut = signOut;
         window.doc = doc;
@@ -164,6 +165,18 @@
 <body class="p-4 md:p-10 safe-area-inset flex flex-col min-h-screen relative">
 
     <div id="toast" class="toast-msg font-bold text-center"></div>
+
+    <!-- מודאל אימות אימייל -->
+    <div id="verificationModal" class="fixed inset-0 z-[90] flex items-center justify-center hidden modal-overlay">
+        <div class="glass-card p-8 max-w-sm w-full border-blue-500/30 border shadow-2xl text-center">
+            <div class="text-5xl mb-4">📧</div>
+            <h3 class="text-2xl font-bold mb-2">אימות אימייל נדרש</h3>
+            <p class="text-gray-400 text-sm mb-6">מטעמי אבטחה, עליך לאמת את כתובת האימייל שלך. שלחנו לך עכשיו קישור לאימייל.</p>
+            <button onclick="window.checkVerification()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all mb-3 shadow-lg">אימתתי, אפשר להמשיך</button>
+            <button onclick="window.resendVerification()" class="w-full bg-white/10 hover:bg-white/20 text-white font-bold py-3 rounded-xl transition-all border border-white/10">שלח לי אימייל שוב</button>
+            <button onclick="document.getElementById('verificationModal').classList.add('hidden')" class="mt-4 text-gray-500 text-sm hover:underline">סגור</button>
+        </div>
+    </div>
 
     <!-- מודאלים -->
     <div id="profilesModal" class="fixed inset-0 z-[60] flex items-center justify-center hidden modal-overlay transition-opacity">
@@ -268,9 +281,9 @@
         </div>
     </div>
 
-    <!-- === בר ניווט עליון עם לחצן האפליקציות === -->
+    <!-- === בר ניווט עליון === -->
     <nav class="max-w-6xl mx-auto w-full flex justify-between items-center mb-6 glass-card px-6 py-4 gap-4 relative z-40">
-        <!-- צד ימין (הלחצן המגניב) -->
+        <!-- צד ימין -->
         <div class="flex items-center gap-4">
             <button id="appMenuBtn" onclick="window.toggleAppMenu(event)" class="w-12 h-12 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors">
                 <div class="waffle-container">
@@ -281,13 +294,12 @@
                 </div>
             </button>
             <h1 class="text-xl md:text-2xl font-bold text-white tracking-wider hidden sm:block">Smart Workspace</h1>
-            <!-- כפתור הבית -->
             <button id="homeBtn" onclick="window.showLauncher()" class="hidden bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-1.5 rounded-lg border border-white/10 transition-all font-bold shadow-md items-center gap-2">
                 🏠 ראשי
             </button>
         </div>
 
-        <!-- תפריט האפליקציות הנפתח (Dropdown) -->
+        <!-- תפריט האפליקציות הנפתח -->
         <div id="appDrawer" class="absolute top-20 right-6 w-72 glass-card p-4 shadow-2xl scale-0 opacity-0 pointer-events-none transition-all duration-300">
             <h3 class="text-center text-sm text-gray-400 font-bold mb-4 border-b border-white/10 pb-2">האפליקציות שלי</h3>
             <div class="grid grid-cols-3 gap-3">
@@ -333,7 +345,7 @@
             <button id="switchProfileBtn" onclick="window.switchProfile()" class="hidden bg-purple-600/20 text-purple-400 text-xs px-3 py-2 rounded-lg border border-purple-600/30 transition-all hover:bg-purple-600/30 font-bold">החלף</button>
             <button id="logoutBtn" onclick="window.handleLogout()" class="hidden bg-red-600/20 text-red-400 text-xs px-3 py-2 rounded-lg border border-red-600/30 transition-all hover:bg-red-600/30 font-bold">התנתק</button>
 
-            <div id="userProfile" class="flex items-center gap-3 cursor-pointer" onclick="document.getElementById('profilesModal').classList.remove('hidden')">
+            <div id="userProfile" class="flex items-center gap-3 cursor-pointer" onclick="window.handleProfileClick()">
                 <div class="flex flex-col text-left hidden sm:flex">
                     <span id="userStatusLabel" class="text-[10px] text-gray-500 uppercase tracking-widest font-bold">מצב אורח</span>
                     <span class="text-sm font-bold text-white" id="userNameLabel">אורח</span>
@@ -510,7 +522,7 @@
         </div>
     </div>
 
-    <!-- === מסך הגדרות סביבה (Smart Settings) - חדש! === -->
+    <!-- === מסך הגדרות סביבה (Smart Settings) === -->
     <div id="settingsAppScreen" class="max-w-6xl mx-auto w-full flex-1 hidden flex-col animate-fade-in">
         <header class="mb-8 text-center md:text-right">
             <h1 class="text-3xl font-extrabold text-gray-400 flex items-center justify-center md:justify-start gap-3">
@@ -525,7 +537,7 @@
             <div class="space-y-4">
                 <div>
                     <label class="block text-sm text-gray-400 mb-2 mr-1 text-right">מפתח Google Gemini API (עבור Smart Search)</label>
-                    <input type="password" id="geminiApiKeyInput" placeholder="הדבק כאן את מפתח ה-AIza שלך..." class="input-style !bg-white/5 text-left dir-ltr">
+                    <input type="password" id="geminiApiKeyInput" value="AIzaSyCq-hMGGMjjZorsvcgcrRPTEDimEcQtLBM" placeholder="הדבק כאן את מפתח ה-AIza שלך..." class="input-style !bg-white/5 text-left dir-ltr">
                     <p class="text-xs text-gray-500 mt-2">המפתח יישמר בצורה מאובטחת בענן תחת הפרופיל שלך, ולא יהיה חשוף לאיש.</p>
                 </div>
                 
@@ -576,8 +588,8 @@
         let unsubscribeDocs = null;
         window.editingDocId = null;
 
-        // משתנה לשמירת מפתח ה-API
-        let savedGeminiKey = "";
+        // משתנה לשמירת מפתח ה-API (הגדרת ברירת המחדל מראש)
+        let savedGeminiKey = "AIzaSyCq-hMGGMjjZorsvcgcrRPTEDimEcQtLBM";
 
         const forbiddenWords = ['סמים', 'הימורים', 'אלימות', 'פוגעני', 'קללה'];
         const gradients = [
@@ -595,7 +607,62 @@
             setTimeout(() => toast.classList.remove('show'), 4000);
         };
 
-        // --- לוגיקת מנוע החיפוש החכם (Smart Search) עם Fetch ישיר ופשוט ---
+        // --- פונקציית fetch חכמה למניעת שגיאות 503 מעומס שרת ---
+        const fetchWithRetry = async (url, payload, retries = 5) => {
+            const delays = [1000, 2000, 4000, 8000, 16000];
+            for (let i = 0; i <= retries; i++) {
+                try {
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (!response.ok) {
+                        let errorMessage = `HTTP error! status: ${response.status}`;
+                        try {
+                            const errorData = await response.text();
+                            errorMessage += ` - Body: ${errorData}`;
+                        } catch(e) {}
+                        throw new Error(errorMessage);
+                    }
+                    
+                    return await response.json();
+                } catch (e) {
+                    if (i === retries) throw e;
+                    console.log(`Server busy, retrying in ${delays[i]/1000}s...`);
+                    await new Promise(resolve => setTimeout(resolve, delays[i]));
+                }
+            }
+        };
+
+        // --- לוגיקת אימות אימייל ---
+        window.checkVerification = async () => {
+            const user = window.auth.currentUser;
+            if (user) {
+                await user.reload(); 
+                if (user.emailVerified) {
+                    document.getElementById('verificationModal').classList.add('hidden');
+                    window.showToast("האימייל אומת בהצלחה! אפשר להתחיל לחפש.", false);
+                } else {
+                    window.showToast("האימייל עדיין לא אומת. בדוק את תיבת הדואר (וגם את הספאם).", true);
+                }
+            }
+        };
+
+        window.resendVerification = async () => {
+            const user = window.auth.currentUser;
+            if (user) {
+                try {
+                    await window.sendEmailVerification(user);
+                    window.showToast("אימייל אימות חדש נשלח אליך בהצלחה 📧", false);
+                } catch(e) {
+                    window.showToast("שגיאה: כנראה שלחנו הרגע. המתן דקה ונסה שוב.", true);
+                }
+            }
+        };
+
+        // --- לוגיקת מנוע החיפוש החכם (Smart Search) ---
         window.executeSmartSearch = async (queryParam = null) => {
             const launcherInput = document.getElementById('smartSearchInput');
             const innerInput = document.getElementById('innerSearchInput');
@@ -618,6 +685,20 @@
                 return;
             }
 
+            // שלב האבטחה: בדיקת אימות אימייל לפני החיפוש
+            const user = window.auth.currentUser;
+            if (!user || user.isAnonymous || localStorage.getItem('shoval_simulated_logout') === 'true') {
+                window.showToast("יש להתחבר לחשבון משפחתי או חינוכי כדי להשתמש בחיפוש ברשת.", true);
+                window.openModal();
+                return;
+            }
+
+            await user.reload(); 
+            if (!user.emailVerified) {
+                document.getElementById('verificationModal').classList.remove('hidden');
+                return;
+            }
+
             window.openApp('search');
             if(innerInput) innerInput.value = query;
             if(launcherInput) launcherInput.value = ""; 
@@ -632,32 +713,26 @@
             `;
 
             try {
-                // משיכת המפתח מההגדרות במקום להקליד אותו בקוד
                 if (!savedGeminiKey) {
                     throw new Error("API_KEY_MISSING");
                 }
                 
                 const payload = {
                     contents: [{ parts: [{ text: query }] }],
-                    systemInstruction: { parts: [{ text: "אתה מנוע חיפוש חכם. מצא מידע מהרשת וענה בעברית בצורה ברורה ומקיפה." }] },
+                    systemInstruction: { parts: [{ text: "אתה מנוע החיפוש Smart Search. תפקידך לספק תשובות מדויקות, עדכניות ומועילות. **הוראה קריטית:** אם המשתמש מחפש אתר, שירות מקוון (כמו יוטיוב, גוגל, ויקיפדיה, משחקים) או כל נושא שיש לו אתר רשמי, **חובה** לכלול בתחילת או בסוף התשובה שלך קישור ישיר, תקין ופעיל בצורה של Markdown (למשל: [לחץ כאן כדי להיכנס ליוטיוב](https://www.youtube.com)). אל תמציא קישורים, השתמש רק בקישורים אמיתיים מהרשת." }] },
                     tools: [{ "google_search": {} }]
                 };
 
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${savedGeminiKey}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+                // שימוש בפונקציית ה-fetch החכמה שמתגברת על שגיאות 503
+                const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${savedGeminiKey}`;
+                const result = await fetchWithRetry(url, payload);
                 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                
-                const result = await response.json();
-                const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "לא מצאנו תשובה ברורה ברשת.";
+                let text = result.candidates?.[0]?.content?.parts?.[0]?.text || "לא מצאנו תשובה ברורה ברשת.";
                 const attributions = result.candidates?.[0]?.groundingMetadata?.groundingAttributions || [];
                 
-                let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<b class="text-blue-300">$1</b>');
+                let formattedText = text.replace(/\*\*(.*?)\*\*/g, '<b class="text-blue-300">$1</b>'); 
+                formattedText = formattedText.replace(/\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/g, '<a href="$2" target="_blank" class="text-blue-400 font-bold hover:underline hover:text-blue-300 underline-offset-4">🔗 $1</a>');
+                formattedText = formattedText.replace(/(^|[^"'])(https?:\/\/[^\s\)]+)/g, '$1<a href="$2" target="_blank" class="text-blue-400 font-bold hover:underline hover:text-blue-300 underline-offset-4 break-all">🔗 $2</a>');
                 formattedText = formattedText.replace(/\n/g, '<br>');
 
                 let sourcesHtml = '';
@@ -676,7 +751,7 @@
                     if (uniqueSources.length > 0) {
                         sourcesHtml = `
                             <div class="mt-8 border-t border-white/10 pt-6">
-                                <h4 class="text-lg font-bold text-blue-400 mb-4 flex items-center gap-2"><span>🔗</span> מקורות מידע מרחבי הרשת:</h4>
+                                <h4 class="text-lg font-bold text-blue-400 mb-4 flex items-center gap-2"><span>🔗</span> מקורות מידע נוספים מרחבי הרשת:</h4>
                                 <div class="flex flex-wrap gap-2">
                                     ${uniqueSources.map(s => `<a href="${s.uri}" target="_blank" class="bg-blue-600/10 text-blue-300 hover:bg-blue-600 hover:text-white px-4 py-2 rounded-xl border border-blue-500/30 transition-all text-sm truncate max-w-[250px] shadow-sm flex items-center gap-2"><span>🌐</span> ${s.title}</a>`).join('')}
                                 </div>
@@ -688,7 +763,7 @@
                 resultsContainer.innerHTML = `
                     <div class="bg-white/5 p-8 rounded-2xl border border-white/10 shadow-2xl backdrop-blur-md">
                         <h3 class="text-2xl font-bold text-white mb-6 border-b border-white/10 pb-4">תוצאות עבור: <span class="text-blue-400">"${query}"</span></h3>
-                        <div class="text-right text-gray-200 leading-relaxed text-lg whitespace-pre-wrap font-medium">
+                        <div class="text-right text-gray-200 leading-relaxed text-lg font-medium">
                             ${formattedText}
                         </div>
                         ${sourcesHtml}
@@ -700,7 +775,7 @@
                 console.error("Search Error:", e);
                 
                 let errorTitle = "אופס! שגיאת גישה";
-                let errorDesc = "החיבור למנוע הבינה המלאכותית נדחה. השרת החזיר שגיאת הרשאה.";
+                let errorDesc = "החיבור למנוע הבינה המלאכותית נדחה או נכשל בעקבות עומס קשה בשרת.";
                 let btnHtml = `<button onclick="window.executeSmartSearch('${query}')" class="mt-4 bg-red-600 hover:bg-red-500 text-white px-6 py-2 rounded-lg transition-all shadow-md">נסה שוב</button>`;
                 
                 if (e.message === "API_KEY_MISSING" || e.message.includes('403') || e.message.includes('400')) {
@@ -726,10 +801,12 @@
             if (!user || !currentProfileId) return;
             try {
                 const docSnap = await window.getDoc(window.doc(window.db, "artifacts", window.appId, "users", user.uid, "settings", currentProfileId));
-                if (docSnap.exists()) {
-                    savedGeminiKey = docSnap.data().geminiKey || "";
-                    document.getElementById('geminiApiKeyInput').value = savedGeminiKey;
+                if (docSnap.exists() && docSnap.data().geminiKey) {
+                    savedGeminiKey = docSnap.data().geminiKey;
+                } else {
+                    savedGeminiKey = "AIzaSyCq-hMGGMjjZorsvcgcrRPTEDimEcQtLBM"; // חזרה למפתח ברירת המחדל
                 }
+                document.getElementById('geminiApiKeyInput').value = savedGeminiKey;
             } catch(e) { console.error("Error loading settings:", e); }
         };
 
@@ -737,6 +814,13 @@
             const key = document.getElementById('geminiApiKeyInput').value.trim();
             const user = window.auth.currentUser;
             if (!user || !currentProfileId) return window.showToast("יש להתחבר לפרופיל ענן כדי לשמור הגדרות!", true);
+            
+            await user.reload();
+            if (!user.emailVerified && key !== "") {
+                document.getElementById('verificationModal').classList.remove('hidden');
+                window.showToast("מטעמי אבטחה, יש לאמת אימייל לפני שמירת מפתח בשרת 🛡️", true);
+                return;
+            }
             
             const btn = document.querySelector('#settingsAppScreen button');
             btn.disabled = true;
@@ -753,14 +837,14 @@
                 window.showToast("הגדרות נשמרו בהצלחה! ⚙️", false);
             } catch(e) {
                 console.error(e);
-                window.showToast("שגיאה בשמירת ההגדרות");
+                window.showToast("שגיאה בשמירת ההגדרות", true);
             } finally {
                 btn.disabled = false;
                 btn.textContent = 'שמור הגדרות';
             }
         };
 
-        // --- לוגיקת לחצן האפליקציות ---
+        // --- לוגיקת לחצן האפליקציות וניווט ---
         window.toggleAppMenu = (e) => {
             if(e) e.stopPropagation();
             const btn = document.getElementById('appMenuBtn');
@@ -778,12 +862,11 @@
         window.addEventListener('click', (e) => {
             const drawer = document.getElementById('appDrawer');
             const btn = document.getElementById('appMenuBtn');
-            if (btn.classList.contains('menu-open') && !drawer.contains(e.target) && !btn.contains(e.target)) {
+            if (btn && btn.classList.contains('menu-open') && !drawer.contains(e.target) && !btn.contains(e.target)) {
                 window.toggleAppMenu();
             }
         });
 
-        // --- לוגיקת ניווט (App Launcher) ---
         window.showLauncher = () => {
             document.getElementById('launcherScreen').classList.remove('hidden');
             document.getElementById('launcherScreen').classList.add('flex');
@@ -949,7 +1032,6 @@
         };
 
         let mouseTipShown = false;
-
         const canvas = document.getElementById('drawCanvas');
         const ctx = canvas.getContext('2d');
         let isDrawing = false;
@@ -979,12 +1061,10 @@
 
         canvas.addEventListener('pointerdown', (e) => {
             isDrawing = true;
-            
             if (e.pointerType === 'mouse' && !mouseTipShown) {
                 window.showToast("טיפ: מומלץ לחבר לוח ציור (Drawing Pad) לשיפור חווית משתמש 🎨", false);
                 mouseTipShown = true;
             }
-
             ctx.beginPath();
             ctx.moveTo(e.offsetX, e.offsetY);
             ctx.lineWidth = e.pointerType === 'pen' ? (e.pressure * 5 + 1) : 3; 
@@ -1006,7 +1086,6 @@
 
         window.saveDrawnTask = async () => {
             const dataUrl = canvas.toDataURL('image/jpeg', 0.8); 
-            
             const user = window.auth.currentUser;
             if (user && currentProfileId && localStorage.getItem('shoval_simulated_logout') !== 'true') {
                 try {
@@ -1019,7 +1098,6 @@
                         completed: false,
                         createdAt: new Date().toISOString()
                     });
-                    
                     window.logActivity("יצר/ה פתק מצויר בתיקייה 🖊️"); 
                     window.closeDrawModal();
                     window.showToast("הפתק נשמר בהצלחה", false);
@@ -1033,7 +1111,6 @@
             }
         };
 
-        // === 📄 SMART DOCS LOGIC ===
         const listenToCloudDocs = (userId, profileId) => {
             if (unsubscribeDocs) unsubscribeDocs();
             const docsRef = window.collection(window.db, "artifacts", window.appId, "users", userId, `docs_${profileId}`);
@@ -1087,14 +1164,11 @@
         window.saveDocument = async () => {
             const title = document.getElementById('docTitleInput').value.trim();
             const content = document.getElementById('docContentInput').value.trim();
-            
             if (!title) return window.showToast("חובה להזין כותרת למסמך");
-            
             const user = window.auth.currentUser;
             if (!user || !currentProfileId || localStorage.getItem('shoval_simulated_logout') === 'true') {
                 return window.showToast("יש להתחבר לפרופיל ענן כדי לשמור מסמכים", true);
             }
-
             try {
                 const docId = window.editingDocId || Date.now().toString();
                 await window.setDoc(window.doc(window.db, "artifacts", window.appId, "users", user.uid, `docs_${currentProfileId}`, docId), {
@@ -1102,10 +1176,8 @@
                     content: content,
                     updatedAt: new Date().toISOString()
                 }, { merge: true });
-                
                 window.logActivity("שמר/ה מסמך: " + title);
                 window.showToast("המסמך נשמר בהצלחה בענן! ☁️", false);
-                
                 window.editingDocId = null;
                 document.getElementById('docTitleInput').value = '';
                 document.getElementById('docContentInput').value = '';
@@ -1133,11 +1205,9 @@
             }
         };
 
-        // === 👥 SMART ACCOUNTS LOGIC ===
         window.renderAccountsScreen = () => {
             const container = document.getElementById('accountManagerContent');
             if (!container) return;
-            
             const user = window.auth.currentUser;
             if (!user || localStorage.getItem('shoval_simulated_logout') === 'true') {
                 container.innerHTML = `
@@ -1170,7 +1240,6 @@
                 <div class="w-24 h-24 bg-gradient-to-br from-emerald-400 to-emerald-600 text-white rounded-full flex items-center justify-center text-5xl mx-auto mb-4 border-4 border-emerald-500/30 shadow-2xl">👤</div>
                 <h3 class="text-3xl font-extrabold text-white mb-2">מרכז ניהול החשבון</h3>
                 <p class="text-emerald-400 font-bold mb-8 text-lg">${user.email}</p>
-                
                 <div class="grid grid-cols-2 gap-6 max-w-md mx-auto mb-10 text-right">
                     <div class="bg-white/5 p-4 rounded-xl border border-white/10 shadow-inner">
                         <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-1">סוג המינוי</div>
@@ -1181,7 +1250,6 @@
                         <div class="font-bold text-base text-emerald-400">${profilesData.length} מתוך 4 מנויים</div>
                     </div>
                 </div>
-
                 <div class="border-t border-white/10 pt-8">
                     <h4 class="text-xl font-bold text-right mb-4 flex justify-between items-center">
                         <button onclick="window.openAddProfile()" class="text-sm bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-2 rounded-lg shadow-md transition-all">+ הוסף פרופיל משתמש</button>
@@ -1227,28 +1295,21 @@
             const modal = document.getElementById('historyModal');
             modal.classList.remove('hidden');
             modal.classList.add('flex');
-            
             const list = document.getElementById('historyList');
             const subtitle = document.getElementById('historySubtitle');
-            
             document.getElementById('historyTitle').textContent = window.currentIsManager ? "היסטוריית שימוש (כללית)" : "היסטוריית שימוש (אישית)";
             subtitle.textContent = window.currentIsManager ? "מציג פעילות של כל משתמשי החשבון המקושרים" : "מציג את הפעילות האישית שלך בלבד (מצב משתמש)";
             list.innerHTML = '<div class="text-center text-gray-500 mt-10"><span class="loader"></span> טוען נתונים...</div>';
-            
             try {
                 const user = window.auth.currentUser;
                 const historyRef = window.collection(window.db, "artifacts", window.appId, "users", user.uid, "history");
                 const snap = await window.getDocs(window.query(historyRef));
-                
                 let logs = [];
                 snap.forEach(doc => logs.push({id: doc.id, ...doc.data()}));
-                
                 if (!window.currentIsManager) {
                     logs = logs.filter(log => log.profileId === currentProfileId);
                 }
-                
                 logs.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
-                
                 list.innerHTML = "";
                 if (logs.length === 0) {
                     list.innerHTML = '<div class="text-center text-gray-500 mt-10 text-sm">אין היסטוריית פעולות להצגה כרגע.</div>';
@@ -1257,7 +1318,6 @@
                         const dateObj = new Date(log.timestamp);
                         const timeStr = dateObj.toLocaleTimeString('he-IL', {hour: '2-digit', minute:'2-digit'});
                         const dateStr = dateObj.toLocaleDateString('he-IL', {day: '2-digit', month: '2-digit'});
-                        
                         const item = document.createElement('div');
                         item.className = "bg-white/5 p-4 rounded-xl border border-white/10 flex flex-row-reverse justify-between items-center";
                         item.innerHTML = `
@@ -1288,12 +1348,11 @@
         window.openModal = () => document.getElementById('authModal').classList.remove('hidden');
         window.closeModal = () => document.getElementById('authModal').classList.add('hidden');
         
-        // --- פונקציה חדשה: בדיקה לפני פתיחת פרופיל ---
         window.handleProfileClick = () => {
             const user = window.auth.currentUser;
             const isLoggedOut = localStorage.getItem('shoval_simulated_logout') === 'true';
             
-            // אם המשתמש מחובר (לא אורח ולא התנתק הרגע)
+            // אם המשתמש מחובר (לא אורח ולא התנתק הרגע) - נפתח את הפרופילים
             if (user && !user.isAnonymous && !isLoggedOut) {
                 document.getElementById('profilesModal').classList.remove('hidden');
             } else {
@@ -1340,32 +1399,27 @@
         window.submitNewProfile = async () => {
             const name = document.getElementById('newProfileName').value.trim();
             const birthDate = document.getElementById('newProfileBirth').value;
-            
             if(!name) return window.showToast("נא למלא את שם המשתמש", true);
             if(!window.editingProfileId && profilesData.length >= 4) return window.showToast("הגעת למגבלת 4 משתמשים בחשבון", true);
 
             const btn = document.getElementById('addProfileBtn');
             btn.disabled = true;
             btn.innerHTML = '<span class="loader"></span> שומר...';
-            
             try {
                 const user = window.auth.currentUser;
                 let age = null;
                 let isMinor = false;
-                
                 if (birthDate) {
                     const birth = new Date(birthDate);
                     age = new Date().getFullYear() - birth.getFullYear();
                     isMinor = age < 18;
                 }
-                
                 let profileRef;
                 if (window.editingProfileId) {
                     profileRef = window.doc(window.db, "artifacts", window.appId, "users", user.uid, "user_profiles", window.editingProfileId);
                 } else {
                     profileRef = window.doc(window.collection(window.db, "artifacts", window.appId, "users", user.uid, "user_profiles"));
                 }
-                
                 const profileData = {
                     id: profileRef.id,
                     displayName: name,
@@ -1373,18 +1427,14 @@
                     age: age,
                     isMinor: isMinor
                 };
-
                 if (!window.editingProfileId) {
                     profileData.createdAt = new Date().toISOString();
                     profileData.isManager = false; 
                     profileData.accountType = 'family';
                 }
-                
                 await window.setDoc(profileRef, profileData, { merge: true });
-                
                 window.showToast(window.editingProfileId ? "פרופיל עודכן בהצלחה!" : "פרופיל נוסף בהצלחה!", false);
                 window.closeAddProfile();
-                
                 loadProfiles(user); 
             } catch(e) {
                 console.error(e);
@@ -1398,7 +1448,6 @@
         window.deleteProfile = async () => {
             if (!window.editingProfileId) return;
             const btn = document.getElementById('deleteProfileBtn');
-
             if (btn.dataset.confirm !== "true") {
                 btn.dataset.confirm = "true";
                 btn.textContent = "בטוח? לחץ שוב למחיקה";
@@ -1408,20 +1457,16 @@
                 }, 3000);
                 return;
             }
-
             if (deleteConfirmTimer) clearTimeout(deleteConfirmTimer);
             btn.disabled = true;
             btn.textContent = "מוחק...";
-
             try {
                 const user = window.auth.currentUser;
                 await window.deleteDoc(window.doc(window.db, "artifacts", window.appId, "users", user.uid, "user_profiles", window.editingProfileId));
-
                 if (window.editingProfileId === sessionStorage.getItem('shoval_current_profile_id')) {
                     sessionStorage.removeItem('shoval_current_profile_id');
                     currentProfileId = null;
                 }
-
                 window.showToast("פרופיל נמחק בהצלחה", false);
                 window.closeAddProfile();
                 loadProfiles(user);
@@ -1444,13 +1489,10 @@
 
         const resetMainUI = () => {
             document.getElementById('authBtn').classList.remove('hidden');
-            
             const logoutBtn = document.getElementById('logoutBtn');
             if(logoutBtn) logoutBtn.classList.add('hidden');
-            
             const switchProfileBtn = document.getElementById('switchProfileBtn');
             if(switchProfileBtn) switchProfileBtn.classList.add('hidden');
-            
             const historyBtn = document.getElementById('historyBtn');
             if(historyBtn) historyBtn.classList.add('hidden');
             
@@ -1484,35 +1526,28 @@
                 
                 if (profilesData.length === 0) {
                     document.getElementById('addProfileTitle').textContent = "צור את הפרופיל הראשון בחשבון";
-                    
                     document.getElementById('authBtn').classList.add('hidden');
                     const logoutBtn = document.getElementById('logoutBtn');
                     if(logoutBtn) logoutBtn.classList.remove('hidden');
-                    
                     document.getElementById('userStatusLabel').textContent = "חשבון ראשי";
                     document.getElementById('userNameLabel').textContent = "ממתין לפרופיל";
-                    
                     if (forceShowModal) window.openAddProfile();
                 } else {
                     document.getElementById('addProfileTitle').textContent = "פרופיל משתמש חדש";
                     renderProfilesList();
-                    
                     const savedProfileId = sessionStorage.getItem('shoval_current_profile_id');
                     const foundProfile = profilesData.find(p => p.id === savedProfileId);
-                    
                     if (foundProfile) {
                         window.selectProfile(foundProfile.id, foundProfile.displayName, foundProfile.isMinor, gradients[0], foundProfile.isManager, foundProfile.accountType);
                     } else {
                         document.getElementById('authBtn').classList.add('hidden');
                         const logoutBtn = document.getElementById('logoutBtn');
                         if(logoutBtn) logoutBtn.classList.remove('hidden');
-                        
                         document.getElementById('userStatusLabel').textContent = "חשבון מחובר";
                         document.getElementById('userStatusLabel').className = "text-[10px] text-green-400 uppercase tracking-widest font-bold";
                         document.getElementById('userNameLabel').textContent = "בחר משתמש";
                         document.getElementById('userInitial').textContent = "👋";
                         document.getElementById('userInitial').className = "w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center font-bold text-lg border border-white/20 shadow-lg text-white";
-                        
                         if (forceShowModal) document.getElementById('profilesModal').classList.remove('hidden');
                     }
                 }
@@ -1525,13 +1560,11 @@
         const renderProfilesList = () => {
             const container = document.getElementById('profilesContainer');
             container.innerHTML = "";
-            
             profilesData.forEach((p, index) => {
                 const grad = gradients[index % gradients.length];
                 const div = document.createElement('div');
                 div.className = "relative group flex flex-col items-center cursor-pointer hover:scale-110 transition-transform duration-300";
                 div.onclick = () => window.selectProfile(p.id, p.displayName, p.isMinor, grad, p.isManager, p.accountType);
-                
                 div.innerHTML = `
                     <button onclick="event.stopPropagation(); window.openEditProfile('${p.id}', '${p.displayName}', '${p.birthDate}')" class="absolute top-2 right-2 bg-black/60 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity z-10 text-sm hover:bg-black/80">
                         ✏️
@@ -1547,7 +1580,6 @@
                 `;
                 container.appendChild(div);
             });
-            
             if (profilesData.length < 4) {
                 const addDiv = document.createElement('div');
                 addDiv.className = "flex flex-col items-center cursor-pointer hover:scale-110 transition-transform duration-300";
@@ -1570,13 +1602,10 @@
             document.getElementById('profilesModal').classList.add('hidden');
             
             document.getElementById('authBtn').classList.add('hidden');
-            
             const logoutBtn = document.getElementById('logoutBtn');
             if(logoutBtn) logoutBtn.classList.remove('hidden');
-            
             const switchProfileBtn = document.getElementById('switchProfileBtn');
             if(switchProfileBtn) switchProfileBtn.classList.remove('hidden');
-            
             const historyBtn = document.getElementById('historyBtn');
             if(historyBtn) historyBtn.classList.remove('hidden');
             
@@ -1595,7 +1624,6 @@
             }
             
             document.getElementById('userNameLabel').textContent = profileName;
-            
             const userInitial = document.getElementById('userInitial');
             userInitial.textContent = profileName.charAt(0).toUpperCase();
             userInitial.className = `w-10 h-10 rounded-full bg-gradient-to-br ${gradClass} flex items-center justify-center font-bold text-lg border border-white/20 shadow-lg text-white`;
@@ -1615,7 +1643,7 @@
             window.currentIsManager = false;
             violationCount = 0;
             currentFolderId = 'general';
-            savedGeminiKey = ""; // איפוס המפתח במעבר משתמש
+            savedGeminiKey = "AIzaSyCq-hMGGMjjZorsvcgcrRPTEDimEcQtLBM"; // איפוס למפתח ברירת המחדל במקום למחרוזת ריקה
             document.getElementById('taskList').innerHTML = ""; 
             const folderTabs = document.getElementById('folderTabsContainer');
             if(folderTabs) folderTabs.innerHTML = "";
@@ -1659,6 +1687,13 @@
             try {
                 const userCredential = await window.createUserWithEmailAndPassword(window.auth, email, password);
                 const user = userCredential.user;
+                
+                try {
+                    await window.sendEmailVerification(user);
+                    window.showToast("נשלח אליך אימייל אימות! אנא בדוק את תיבת הדואר שלך 📧", false);
+                } catch(e) {
+                    console.log("Email verification not sent:", e);
+                }
 
                 let age = null;
                 let isMinor = false;
@@ -1682,9 +1717,7 @@
                 await window.setDoc(profileRef, profileData);
 
                 localStorage.setItem('shoval_simulated_logout', 'false');
-                window.showToast("חשבון המנהל נוצר בהצלחה!", false);
                 window.closeModal();
-                
                 window.selectProfile(profileData.id, profileData.displayName, profileData.isMinor, gradients[0], true, profileData.accountType);
             } catch (err) {
                 if (err.code === 'auth/email-already-in-use') {
