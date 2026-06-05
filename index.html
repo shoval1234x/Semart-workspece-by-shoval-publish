@@ -29,7 +29,8 @@
             projectId: "shoval2-ec154",
             storageBucket: "shoval2-ec154.firebasestorage.app",
             messagingSenderId: "118826356032",
-            appId: "1:118826356032:web:a987981f3b450b3fce3ea5"
+            appId: "1:118826356032:web:a987981f3b450b3fce3ea5",
+            measurementId: "G-RDLQLBSLKS"
         };
         if (typeof __firebase_config !== 'undefined') { try { firebaseConfig = JSON.parse(__firebase_config); } catch(e) {} }
         
@@ -662,7 +663,11 @@
             const btn = document.getElementById('loginSubmitBtn'); if(btn) { btn.disabled = true; btn.innerHTML = '<span class="loader"></span> מתחבר...'; }
             try {
                 await window.signInWithEmailAndPassword(window.auth, email, pass);
-                localStorage.setItem('shoval_simulated_logout', 'false'); window.showToast("התחברת בהצלחה לענן!", false); window.closeModal(); if (window.loadProfiles) window.loadProfiles(window.auth.currentUser, true); 
+                localStorage.setItem('shoval_simulated_logout', 'false'); 
+                sessionStorage.removeItem('shoval_current_profile_id'); // מנקה פרופיל קודם
+                window.showToast("התחברת בהצלחה לענן!", false); 
+                window.closeModal(); 
+                if (window.loadProfiles) window.loadProfiles(window.auth.currentUser, true); 
             } catch (e) { window.showToast("אימייל או סיסמה שגויים", true); } finally { if (btn) { btn.disabled = false; btn.textContent = "כניסה"; } }
         };
 
@@ -675,15 +680,20 @@
                 const profileRef = window.doc(window.collection(window.db, "artifacts", window.appId, "users", cred.user.uid, "user_profiles"));
                 const profileData = { id: profileRef.id, displayName: name, isMinor: false, isManager: true, createdAt: new Date().toISOString() };
                 await window.setDoc(profileRef, profileData);
+                localStorage.setItem('shoval_simulated_logout', 'false'); 
+                sessionStorage.removeItem('shoval_current_profile_id');
                 window.showToast("החשבון נוצר בהצלחה!", false); window.closeModal(); window.selectProfile(profileData.id, profileData.displayName, false, window.gradients[0], true);
             } catch(e) { window.showToast("שגיאה ברישום החשבון", true); } finally { if(btn) { btn.disabled = false; btn.textContent = "צור חשבון"; } }
         };
 
         window.handleLogout = async () => {
             try {
-                await window.signOut(window.auth); localStorage.setItem('shoval_simulated_logout', 'true');
+                await window.signOut(window.auth); 
+                localStorage.setItem('shoval_simulated_logout', 'true');
+                sessionStorage.removeItem('shoval_current_profile_id'); // מנקה את הבחירה מהזיכרון
                 const pModal = document.getElementById('profilesModal'); if (pModal) pModal.classList.add('hidden');
-                if(window.resetMainUI) window.resetMainUI(); window.showToast("התנתקת מהחשבון הראשי בהצלחה.", false);
+                if(window.resetMainUI) window.resetMainUI(); 
+                window.showToast("התנתקת מהחשבון הראשי בהצלחה.", false);
                 if(!window.isUsingPlaceholder) { await window.signInAnonymously(window.auth); }
             } catch (error) {}
         };
@@ -702,9 +712,21 @@
             if(!window.db) return;
             try {
                 const profilesRef = window.collection(window.db, "artifacts", window.appId, "users", user.uid, "user_profiles"); const snap = await window.getDocs(window.query(profilesRef)); window.profilesData = []; snap.forEach(doc => window.profilesData.push({id: doc.id, ...doc.data()}));
-                if (window.profilesData.length === 0) { if (forceShowModal) window.openAddProfile(); } else {
-                    window.renderProfilesList(); const savedProfileId = sessionStorage.getItem('shoval_current_profile_id'); const foundProfile = window.profilesData.find(p => p.id === savedProfileId);
-                    if (foundProfile) { window.selectProfile(foundProfile.id, foundProfile.displayName, foundProfile.isMinor, window.gradients[0], foundProfile.isManager); } else { document.getElementById('profilesModal')?.classList.remove('hidden'); }
+                if (window.profilesData.length === 0) { 
+                    if (forceShowModal) window.openAddProfile(); 
+                } else {
+                    window.renderProfilesList(); 
+                    const savedProfileId = sessionStorage.getItem('shoval_current_profile_id'); 
+                    const foundProfile = window.profilesData.find(p => p.id === savedProfileId);
+                    if (foundProfile && !forceShowModal) { 
+                        window.selectProfile(foundProfile.id, foundProfile.displayName, foundProfile.isMinor, window.gradients[0], foundProfile.isManager); 
+                    } else { 
+                        const modal = document.getElementById('profilesModal');
+                        if(modal) {
+                            modal.classList.remove('hidden');
+                            modal.classList.add('flex'); // הוספת flex לתצוגה תקינה של המודאל
+                        }
+                    }
                 }
             } catch(e) { window.resetMainUI(); }
         };
@@ -720,7 +742,9 @@
 
         window.selectProfile = (profileId, profileName, isMinor, gradClass, isManager) => {
             window.currentProfileId = profileId; window.currentIsManager = isManager; sessionStorage.setItem('shoval_current_profile_id', profileId);
-            document.getElementById('profilesModal')?.classList.add('hidden'); document.getElementById('authBtn')?.classList.add('hidden'); document.getElementById('logoutBtn')?.classList.remove('hidden'); document.getElementById('switchProfileBtn')?.classList.remove('hidden');
+            const pModal = document.getElementById('profilesModal');
+            if (pModal) { pModal.classList.add('hidden'); pModal.classList.remove('flex'); }
+            document.getElementById('authBtn')?.classList.add('hidden'); document.getElementById('logoutBtn')?.classList.remove('hidden'); document.getElementById('switchProfileBtn')?.classList.remove('hidden');
             const statusLabel = document.getElementById('userStatusLabel'); const nameLabel = document.getElementById('userNameLabel');
             if(statusLabel) statusLabel.textContent = isManager ? "מנהל ראשי" : "פרופיל אישי"; if(nameLabel) nameLabel.textContent = profileName;
             const initEl = document.getElementById('userInitial'); if(initEl) { initEl.textContent = profileName.charAt(0).toUpperCase(); initEl.className = `w-10 h-10 rounded-full bg-gradient-to-br ${gradClass} flex items-center justify-center font-bold text-lg border border-white/20 text-white`; }
@@ -728,7 +752,15 @@
             updateAiLockState(); // שחרור נעילת AI בכניסה
         };
 
-        window.switchProfile = () => { sessionStorage.removeItem('shoval_current_profile_id'); window.currentProfileId = null; window.resetMainUI(); if(window.renderProfilesList) window.renderProfilesList(); document.getElementById('profilesModal')?.classList.remove('hidden'); };
+        window.switchProfile = () => { 
+            sessionStorage.removeItem('shoval_current_profile_id'); window.currentProfileId = null; window.resetMainUI(); 
+            if(window.renderProfilesList) window.renderProfilesList(); 
+            const modal = document.getElementById('profilesModal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+            }
+        };
         window.openAddProfile = () => { document.getElementById('addProfileModal')?.classList.remove('hidden'); }; window.closeAddProfile = () => { document.getElementById('addProfileModal')?.classList.add('hidden'); };
         window.submitNewProfile = async () => { const name = document.getElementById('newProfileName').value.trim(); if(!name) return window.showToast("נא למלא שם"); try { const profileRef = window.doc(window.collection(window.db, "artifacts", window.appId, "users", window.auth.currentUser.uid, "user_profiles")); await window.setDoc(profileRef, { id: profileRef.id, displayName: name, isMinor: false, isManager: false, createdAt: new Date().toISOString() }); window.showToast("פרופיל נוסף בהצלחה!", false); window.closeAddProfile(); window.loadProfiles(window.auth.currentUser); } catch(e) {} };
 
